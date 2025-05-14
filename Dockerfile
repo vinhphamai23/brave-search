@@ -1,12 +1,19 @@
 FROM node:22.12-alpine AS builder
 
-# Must be entire project because `prepare` script is run during `npm install` and requires all files.
-COPY src/brave-search /app
-COPY tsconfig.json /tsconfig.json
-
 WORKDIR /app
 
-RUN --mount=type=cache,target=/root/.npm npm install
+# Copy package files first
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy source files
+COPY . .
+
+# Build TypeScript
+RUN npm run build
 
 FROM node:22-alpine AS release
 
@@ -19,5 +26,7 @@ COPY --from=builder /app/package-lock.json /app/package-lock.json
 ENV NODE_ENV=production
 
 RUN npm ci --ignore-scripts --omit-dev
+
+EXPOSE 3000
 
 ENTRYPOINT ["node", "dist/index.js"]
