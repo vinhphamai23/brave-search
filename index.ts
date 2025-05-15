@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import express, { Request, Response } from "express";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -364,13 +365,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-async function runServer() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Brave Search MCP Server running on stdio");
-}
+// --- SSE transport as express server ---
+const app = express();
+let transport: SSEServerTransport;
 
-runServer().catch((error) => {
-  console.error("Fatal error running server:", error);
-  process.exit(1);
+app.get("/sse", async (req: Request, res: Response) => {
+  console.log("Received SSE client connection");
+  transport = new SSEServerTransport("/message", res);
+  await server.connect(transport);
+});
+
+app.post("/message", express.json(), async (req: Request, res: Response) => {
+  if (!transport) {
+    res.status(503).send("SSE transport not initialized");
+    return;
+  }
+  await transport.handlePostMessage(req, res);
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Brave Search MCP Server running (SSE) on port ${PORT}`);
 });
